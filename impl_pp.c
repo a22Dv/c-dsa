@@ -1,0 +1,43 @@
+# 1 "impl.c"
+# 1 "<built-in>" 1
+# 1 "<built-in>" 3
+# 394 "<built-in>" 3
+# 1 "<command line>" 1
+# 1 "<built-in>" 2
+# 1 "impl.c" 2
+
+
+
+
+# 1 ".\\array.h" 1
+# 10 ".\\array.h"
+static inline size_t _n2exp(size_t n) {
+    n > 0 ? --n : 0;
+    n |= (n >> 1);
+    n |= (n >> 2);
+    n |= (n >> 4);
+    n |= (n >> 8);
+    n |= (n >> 16);
+
+    n |= (n >> 32);
+
+    ++n;
+    return n;
+}
+# 219 ".\\array.h"
+typedef struct { int *_data; size_t _size; size_t _capacity; } int_array; size_t int_array_capacity(int_array *self); size_t int_array_size(int_array *self); int *int_array_data(int_array *self); int int_array_reserve(int_array *self, const size_t new_capacity); int int_array_resize(int_array *self, const size_t new_size); int int_array_init(int_array *self, const size_t size); void int_array_delete(int_array *self); int int_array_append(int_array *dst, int_array *src); int int_array_push_back(int_array *self, int element); void int_array_pop_back(int_array *self); int *int_array_front(int_array *self); int *int_array_back(int_array *self); int int_array_insert(int_array *self, int element, size_t index); void int_array_remove(int_array *self, size_t index); void int_array_clear(int_array *self); int *int_array_at(int_array *self, size_t index); typedef struct { float *_data; size_t _size; size_t _capacity; } float_array; size_t float_array_capacity(float_array *self); size_t float_array_size(float_array *self); float *float_array_data(float_array *self); int float_array_reserve(float_array *self, const size_t new_capacity); int float_array_resize(float_array *self, const size_t new_size); int float_array_init(float_array *self, const size_t size); void float_array_delete(float_array *self); int float_array_append(float_array *dst, float_array *src); int float_array_push_back(float_array *self, float element); void float_array_pop_back(float_array *self); float *float_array_front(float_array *self); float *float_array_back(float_array *self); int float_array_insert(float_array *self, float element, size_t index); void float_array_remove(float_array *self, size_t index); void float_array_clear(float_array *self); float *float_array_at(float_array *self, size_t index);
+
+
+
+
+
+size_t int_array_capacity(int_array *self) { if (!self) { return 0; } return self->_capacity; } size_t int_array_size(int_array *self) { if (!self) { return 0; } return self->_size; } int *int_array_data(int_array *self) { if (!self) { return NULL; } return self->_data; } int int_array_reserve(int_array *self, const size_t new_capacity) { if (!self) { return 1; } if (self->_capacity >= new_capacity) { return 0; } size_t new_total_capacity = _n2exp(new_capacity); int *temp = (int *)realloc(self->_data, new_total_capacity * sizeof(int)); if (!temp) { return 1; } self->_data = temp; self->_capacity = new_total_capacity; return 0; } int int_array_resize(int_array *self, const size_t new_size) { if (!self) { return 1; } if (self->_capacity < new_size) { if (int_array_reserve(self, new_size)) { return 1; } } self->_size = new_size; return 0; } int int_array_init(int_array *self, const size_t size) { if (!self) { return 1; } size_t new_capacity = _n2exp(size); self->_data = (int *)malloc(new_capacity * sizeof(int)); if (!self->_data) { return 1; } self->_capacity = new_capacity; self->_size = 0; return 0; } void int_array_delete(int_array *self) { if (!self) { return; } free(self->_data); self->_data = NULL; self->_size = 0; self->_capacity = 0; } int int_array_append(int_array *dst, int_array *src) { if (!dst || !src) { return 1; } if (src->_size == 0) { return 0; } size_t new_dst_size = dst->_size + src->_size; if (new_dst_size > dst->_capacity) { if (int_array_reserve(dst, new_dst_size)) { return 1; } } memcpy((void *)(dst->_data + dst->_size), (void *)(src->_data), src->_size * sizeof(int)); dst->_size = new_dst_size; return 0; } int int_array_push_back(int_array *self, int element) { if (!self) { return 1; } if (self->_size + 1 > self->_capacity) { if (int_array_reserve(self, self->_size + 1)) { return 1; } } self->_data[self->_size] = element; ++self->_size; return 0; } void int_array_pop_back(int_array *self) { if (!self || !self->_size) { return; } --self->_size; } int *int_array_front(int_array *self) { if (!self || self->_size == 0) { return NULL; } return self->_data; } int *int_array_back(int_array *self) { if (!self || self->_size == 0) { return NULL; } return &(self->_data[self->_size - 1]); } int int_array_insert(int_array *self, int element, size_t index) { if (!self || index > self->_size) { return 1; } if (self->_size + 1 > self->_capacity) { if (int_array_reserve(self, self->_size + 1)) { return 1; } } memmove((void *)(self->_data + index + 1), (void *)(self->_data + index), (self->_size - index) * sizeof(int)); self->_data[index] = element; ++self->_size; return 0; } void int_array_remove(int_array *self, size_t index) { if (!self || index >= self->_size) { return; } memmove((void *)(self->_data + index), (void *)(self->_data + index + 1), (self->_size - index - 1) * sizeof(int)); --self->_size; } void int_array_clear(int_array *self) { self->_size = 0; } int *int_array_at(int_array *self, size_t index) { if (!self || self->_size <= index) { return NULL; } return &(self->_data[index]); } size_t float_array_capacity(float_array *self) { if (!self) { return 0; } return self->_capacity; } size_t float_array_size(float_array *self) { if (!self) { return 0; } return self->_size; } float *float_array_data(float_array *self) { if (!self) { return NULL; } return self->_data; } int float_array_reserve(float_array *self, const size_t new_capacity) { if (!self) { return 1; } if (self->_capacity >= new_capacity) { return 0; } size_t new_total_capacity = _n2exp(new_capacity); float *temp = (float *)realloc(self->_data, new_total_capacity * sizeof(float)); if (!temp) { return 1; } self->_data = temp; self->_capacity = new_total_capacity; return 0; } int float_array_resize(float_array *self, const size_t new_size) { if (!self) { return 1; } if (self->_capacity < new_size) { if (float_array_reserve(self, new_size)) { return 1; } } self->_size = new_size; return 0; } int float_array_init(float_array *self, const size_t size) { if (!self) { return 1; } size_t new_capacity = _n2exp(size); self->_data = (float *)malloc(new_capacity * sizeof(float)); if (!self->_data) { return 1; } self->_capacity = new_capacity; self->_size = 0; return 0; } void float_array_delete(float_array *self) { if (!self) { return; } free(self->_data); self->_data = NULL; self->_size = 0; self->_capacity = 0; } int float_array_append(float_array *dst, float_array *src) { if (!dst || !src) { return 1; } if (src->_size == 0) { return 0; } size_t new_dst_size = dst->_size + src->_size; if (new_dst_size > dst->_capacity) { if (float_array_reserve(dst, new_dst_size)) { return 1; } } memcpy((void *)(dst->_data + dst->_size), (void *)(src->_data), src->_size * sizeof(float)); dst->_size = new_dst_size; return 0; } int float_array_push_back(float_array *self, float element) { if (!self) { return 1; } if (self->_size + 1 > self->_capacity) { if (float_array_reserve(self, self->_size + 1)) { return 1; } } self->_data[self->_size] = element; ++self->_size; return 0; } void float_array_pop_back(float_array *self) { if (!self || !self->_size) { return; } --self->_size; } float *float_array_front(float_array *self) { if (!self || self->_size == 0) { return NULL; } return self->_data; } float *float_array_back(float_array *self) { if (!self || self->_size == 0) { return NULL; } return &(self->_data[self->_size - 1]); } int float_array_insert(float_array *self, float element, size_t index) { if (!self || index > self->_size) { return 1; } if (self->_size + 1 > self->_capacity) { if (float_array_reserve(self, self->_size + 1)) { return 1; } } memmove((void *)(self->_data + index + 1), (void *)(self->_data + index), (self->_size - index) * sizeof(float)); self->_data[index] = element; ++self->_size; return 0; } void float_array_remove(float_array *self, size_t index) { if (!self || index >= self->_size) { return; } memmove((void *)(self->_data + index), (void *)(self->_data + index + 1), (self->_size - index - 1) * sizeof(float)); --self->_size; } void float_array_clear(float_array *self) { self->_size = 0; } float *float_array_at(float_array *self, size_t index) { if (!self || self->_size <= index) { return NULL; } return &(self->_data[index]); }
+# 6 "impl.c" 2
+
+
+int main() {
+    int_array intarr;
+    int_array_init(&intarr, 5);
+    int_array_push_back(&intarr, 100);
+    _Generic(&intarr, int_array * : int_array_pop_back)(&intarr);
+}
