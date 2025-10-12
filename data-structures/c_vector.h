@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <stdalign.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -39,7 +40,7 @@ static inline size_t _n2exp(size_t n) {
     return n;
 }
 
-typedef struct cvec_metadata {
+typedef struct alignas(max_align_t) {
     size_t _capacity;
     size_t _size;
     size_t _esize;
@@ -61,7 +62,7 @@ static inline int vec_init(void **vec, size_t e_size, size_t init_cpcty, void (*
     size_t ncap = 0;
     cvec_metadata *base = NULL;
     char *data = NULL;
-    _VREQUIRE(vec, rcode = _VFAILURE; goto end);
+    _VREQUIRE(vec && e_size > 0, rcode = _VFAILURE; goto end);
     ncap = _n2exp(init_cpcty);
     *vec = malloc(sizeof(cvec_metadata) + (ncap * e_size));
     _VREQUIRE(*vec, rcode = _VFAILURE; goto end);
@@ -108,7 +109,7 @@ static inline int vec_reserve(void **vec, size_t cpcty) {
     cvec_metadata *base = NULL;
     cvec_metadata *tmp = NULL;
     size_t ncap = 0;
-    _VREQUIRE(vec && *vec, rcode = _VFAILURE; goto end);
+    _VREQUIRE(vec && *vec && cpcty < SIZE_MAX / vec_esize(*vec), rcode = _VFAILURE; goto end);
     _VREQUIRE(vec_capacity(*vec) < cpcty, goto end);
     ncap = _n2exp(cpcty);
     base = vec_base(*vec);
@@ -176,7 +177,7 @@ end:
 }
 
 #ifdef VTYPES
-#define VEC_BACK(vec) (vec[vec_size((void*)vec) - 1])
+#define VEC_BACK(vec) (vec[vec_size((void *)vec) - 1])
 #define VEC_FRONT(vec) (vec[0])
 #define VEC_BEGIN(vec) (&(VEC_FRONT(vec)))
 #define VEC_END(vec) vec_end((void *)vec)
