@@ -1,7 +1,6 @@
 /*
     c_vector.h
     A minimal resizable array (a.k.a vector) implementation.
-    NOTE: TESTING REQUIRED.
 */
 
 #pragma once
@@ -15,8 +14,6 @@
 #define _VSUCCESS 1
 #define _VFAILURE 0
 
-#define _VMAX(a, b) ((a) > (b) ? (a) : (b))
-#define _VMIN(a, b) ((a) < (b) ? (a) : (b))
 #define _VREQUIRE(cond, action)                                                                                        \
     do {                                                                                                               \
         if (!(cond)) {                                                                                                 \
@@ -24,6 +21,7 @@
         }                                                                                                              \
     } while (0)
 
+// Next largest power of 2
 static inline size_t _n2exp(size_t n) {
     if (n == 0)
         return 1;
@@ -47,11 +45,31 @@ typedef struct alignas(max_align_t) {
     void (*_dtor)(void *);
 } cvec_metadata;
 
+// Get base address.
 static inline cvec_metadata *vec_base(void *vec) { return vec ? (((cvec_metadata *)vec) - 1) : NULL; }
+
+// Get vector size.
 static inline size_t vec_size(void *vec) { return vec ? vec_base(vec)->_size : 0; }
+
+// Get vector capacity.
 static inline size_t vec_capacity(void *vec) { return vec ? vec_base(vec)->_capacity : 0; }
+
+// Get vector destructor.
 static inline void (*vec_dtor(void *vec))(void *) { return vec ? vec_base(vec)->_dtor : NULL; }
+
+// Get vector element size.
 static inline size_t vec_esize(void *vec) { return vec ? vec_base(vec)->_esize : 0; }
+
+// Returns a `void*` pointer to the end of the vector exclusive of the last valid element.
+static inline void *vec_end(void *vec) { return vec ? (char *)vec + (vec_size(vec)) * vec_esize(vec) : NULL; }
+
+// Returns a `void*` pointer to the starting valid element of the vector.
+static inline void *vec_begin(void *vec) { return vec && vec_size(vec) > 0 ? vec : NULL; }
+
+// Returns a `void*` pointer to the i'th element of the vector.
+static inline void *vec_at(void *vec, size_t i) {
+    return vec && vec_size(vec) > i ? (char *)vec + i * vec_esize(vec) : NULL;
+}
 
 /**
     Initializes a given pointer with a metadata struct.
@@ -101,9 +119,7 @@ end:
     return;
 }
 
-/**
-    Reserves enough bytes to hold more than or equal to `cpcty` elements.
-*/
+// Reserves enough bytes to hold more than or equal to `cpcty` elements.
 static inline int vec_reserve(void **vec, size_t cpcty) {
     int rcode = _VSUCCESS;
     cvec_metadata *base = NULL;
@@ -121,10 +137,78 @@ end:
     return rcode;
 }
 
-/**
-    Pushes elements to the rear of the vector,
-    resizing as needed.
-*/
+// Resizes the vector to a specified size. Allocating as needed, and null-initializing the members if required.
+static inline int vec_resize(void **vec, size_t size) {
+    int rcode = _VSUCCESS;
+    cvec_metadata *base = 0;
+    _VREQUIRE(vec && *vec, rcode = _VFAILURE; goto end);
+    base = vec_base(*vec);
+    if (size > vec_capacity(*vec)) {
+        _VREQUIRE(vec_reserve(vec, size), rcode = _VFAILURE; goto end);
+    } else if (size < base->_size && base->_dtor) {
+        void (*dtor)(void *) = base->_dtor;
+        size_t vsize = base->_size;
+        size_t esize = base->_esize;
+        for (size_t i = size; i < vsize; ++i) {
+            dtor((char *)*vec + i * esize);
+        }
+    }
+    if (size > base->_size) {
+        memset((char *)*vec + base->_esize * base->_size, 0, base->_esize * (size - base->_size));
+    }
+    base->_size = size;
+end:
+    return rcode;
+}
+
+// Shrinks the vector's allocation to exactly vec_size(vec) elements.
+static inline int vec_shrink_to_fit(void **vec) {
+    int rcode = _VSUCCESS;
+    cvec_metadata *base = NULL;
+    cvec_metadata *tmp = NULL;
+    _VREQUIRE(vec && *vec, rcode = _VFAILURE; goto end);
+    base = vec_base(*vec);
+    tmp = (cvec_metadata *)realloc(base, sizeof(cvec_metadata) + base->_size);
+    _VREQUIRE(tmp, rcode = _VFAILURE; goto end);
+    *vec = tmp;
+end:
+    return rcode;
+}
+
+// Inserts an element at a specified index.
+static inline int vec_insert(void** vec, void* element, size_t i) {
+    _VREQUIRE(vec && *vec && element && vec_size(*vec) >= i, return _VFAILURE);
+    _VREQUIRE(vec_reserve(vec, vec_size(*vec) + 1), return _VFAILURE);
+    size_t size = vec_size(*vec);
+    size_t esize =  vec_esize(*vec);
+    memmove((char*)*vec + (i + 1) * esize, (char*)*vec + i * esize, (size - i) * esize);
+    memcpy((char*)*vec + i * esize, element, esize);
+    ++vec_base(*vec)->_size;
+    return _VSUCCESS;
+}
+
+// Removes an element at a specified index and calls the deconstructor if provided.
+static inline void vec_remove(void** vec, size_t i) {
+    _VREQUIRE(vec && *vec && vec_size(*vec) > i, return);
+    cvec_metadata* base = vec_base(*vec);
+    if (base->_dtor) {
+        base->_dtor((char*)*vec + i * base->_esize);
+    }
+    size_t esize = base->_esize;
+    memmove((char*)*vec + i * esize, (char*)*vec + (i + 1) * esize, (vec_size(*vec) - i - 1) * esize);
+    --base->_size;
+}
+
+// Fills a given out-parameter with the address of the end of the vector.
+static inline int vec_emplace_back(void **vec, void **out) {
+    _VREQUIRE(vec && *vec && out, return _VFAILURE);
+    _VREQUIRE(vec_reserve(vec, vec_size(*vec) + 1), return _VFAILURE);
+    ++vec_base(*vec)->_size;
+    *out = (char *)vec_end(*vec) - vec_esize(*vec);
+    return _VSUCCESS;
+}
+
+// Pushes elements to the rear of the vector, resizing as needed.
 static inline int vec_push_back(void **vec, void *element) {
     int rcode = _VSUCCESS;
     size_t nsize, esize;
@@ -140,10 +224,7 @@ end:
     return rcode;
 }
 
-/**
-    Pops elements out of the rear of the vector.
-    Popping an empty vector is a no-op.
-*/
+// Pops elements out of the rear of the vector. Popping an empty vector is a no-op.
 static inline void vec_pop_back(void *vec) {
     cvec_metadata *base = NULL;
     _VREQUIRE(vec, goto end);
@@ -158,11 +239,7 @@ end:
     return;
 }
 
-/**
-    Returns a void* pointer to the end of the vector.
-    After the last valid element.
-*/
-static inline void *vec_end(void *vec) { return vec ? (char *)vec + (vec_size(vec)) * vec_esize(vec) : NULL; }
+// Returns a void* pointer to the end of the vector after the last valid element.
 static inline void vec_clear(void *vec) {
     cvec_metadata *base = NULL;
     _VREQUIRE(vec, goto end);
@@ -176,30 +253,29 @@ end:
     return;
 }
 
+#define VTYPES(T)
 #ifdef VTYPES
-#define VEC_BACK(vec) (vec[vec_size((void *)vec) - 1])
-#define VEC_FRONT(vec) (vec[0])
-#define VEC_BEGIN(vec) (&(VEC_FRONT(vec)))
+#define VEC_AT(vec, i) vec_at((void*)vec, i);
+#define VEC_BEGIN(vec) vec_begin((void *)vec)
 #define VEC_END(vec) vec_end((void *)vec)
-#define VEC_ESIZE(vec) vec_esize(vec)
-#define VEC_DTOR(vec) vec_dtor(vec)
-#define VEC_CAPACITY(vec) vec_capacity(vec)
-#define VEC_SIZE(vec) vec_size(vec)
+#define VEC_ESIZE(vec) vec_esize((void *)vec)
+#define VEC_DTOR(vec) vec_dtor((void *)vec)
+#define VEC_CAPACITY(vec) vec_capacity((void *)vec)
+#define VEC_SIZE(vec) vec_size((void *)vec)
 #define VEC_UNINIT(vec) vec_uninit((void **)&vec)
 #define VEC_CLEAR(vec) vec_clear((void *)vec)
 #define VEC_RESERVE(vec, size) vec_reserve((void **)&vec, size)
 #define VEC_POP_BACK(vec) vec_pop_back((void *)vec)
-
+#define VEC_EMPLACE_BACK(vec, ptr) vec_emplace_back((void**)&vec, (void**)&ptr)
+#define VEC_SHRINK_TO_FIT(vec) vec_shrink_to_fit((void**)&vec)
+// Vector push back implementation.
 #define _IMPL_VPUSH_BACK(T)                                                                                            \
-    static inline int vec_##T##_push_back(T **vec, T e) {                                                              \
-        T element = e;                                                                                                 \
-        return vec_push_back((void **)vec, (void *)&element);                                                          \
-    }
+    static inline int vec_##T##_push_back(T **vec, T e) { return vec_push_back((void **)vec, (void *)&(T){e}); }
 VTYPES(_IMPL_VPUSH_BACK)
 #define _IMPL_GENERIC_PUSH_BACK(type) type ** : vec_##type##_push_back,
 #define VEC_PUSH_BACK(vec, e) _Generic(&vec, VTYPES(_IMPL_GENERIC_PUSH_BACK) default: (void)0)(&vec, e)
-#define VEC_RESERVE(vec, capacity) (vec_reserve(&vec, capacity))
 
+// Vector initialization macros.
 #define _IMPL_VINIT_DEFAULT(T)                                                                                         \
     static inline int vec_##T##_init_default(T **vec) { return vec_init((void **)vec, sizeof(T), 0, NULL); }
 #define _IMPL_VINIT_SIZE(T)                                                                                            \
@@ -210,12 +286,9 @@ VTYPES(_IMPL_VPUSH_BACK)
     static inline int vec_##T##_init_size_dtor(T **vec, size_t size, void (*dtor)(void *)) {                           \
         return vec_init((void **)vec, sizeof(T), size, dtor);                                                          \
     }
-
-// Define implementations
 VTYPES(_IMPL_VINIT_DEFAULT)
 VTYPES(_IMPL_VINIT_SIZE)
 VTYPES(_IMPL_VINIT_SIZE_DTOR)
-
 #define _IMPL_VINIT_DISPATCH(_1, _2, _3, NAME, ...) NAME
 #define _IMPL_VINIT_SDT_GENERIC(type) type ** : vec_##type##_init_size_dtor,
 #define _IMPL_VINIT_S_GENERIC(type) type ** : vec_##type##_init_size,
