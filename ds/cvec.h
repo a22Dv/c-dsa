@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Utility macros
+// Utility macros.
 #define _CVREQUIRE(condition, action)                                                              \
     do {                                                                                           \
         if (!(condition))                                                                          \
@@ -20,6 +20,7 @@
 #define _CVTRUE 1
 #define _CVFOR(iter, start, end, step) for (size_t iter = (start); iter < (end); iter += (step))
 
+// Vector header data.
 typedef struct {
     size_t _element_size;
     size_t _capacity;
@@ -75,15 +76,14 @@ static inline _Bool cvec_init(
 static inline void cvec_uninit(void **restrict vec) {
     _CVREQUIRE(vec && *vec, return);
     cvec_t *cvec = _CVHEADER(*vec);
-    void *data = *vec;
     if (cvec->_destructor) {
-        _CVFOR(i, 0, _CVSIZE(*vec), 1) { cvec->_destructor((char *)data + i * _CVESIZE(*vec)); }
+        _CVFOR(i, 0, _CVSIZE(*vec), 1) { cvec->_destructor((char *)*vec + i * _CVESIZE(*vec)); }
     }
     free(cvec);
     *vec = NULL;
 }
 
-// Guarantees the vector's capacity >= specified capacity
+// Guarantees the vector's capacity >= specified capacity.
 static inline _Bool cvec_reserve(void **restrict vec, size_t new_capacity) {
     _CVREQUIRE(vec && *vec, return _CVFALSE);
     _CVREQUIRE(new_capacity > _CVCAPACITY(*vec), return _CVTRUE);
@@ -192,7 +192,7 @@ static inline _Bool cvec_dpcopy(
     return _CVTRUE;
 }
 
-// Macro API
+// Macro API.
 #if defined(__GNUC__) || defined(__clang__)
 #define CVEC_INIT(vec, init_capacity, destructor)                                                  \
     cvec_init((void **)&vec, sizeof(*vec), init_capacity, destructor)
