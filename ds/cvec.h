@@ -3,23 +3,22 @@
     A minimal vector implementation in C.
 */
 
-#include <limits.h>
+#pragma once
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 // Utility macros
-#define _VREQUIRE(condition, action)                                                               \
+#define _CVREQUIRE(condition, action)                                                              \
     do {                                                                                           \
         if (!(condition))                                                                          \
             action;                                                                                \
     } while (0)
-#define _VFALSE 0
-#define _VTRUE 1
-#define _VMAX(a, b) ((a) > (b) ? (a) : (b))
-#define _VMIN(a, b) ((a) < (b) ? (a) : (b))
-#define _VFOR(iter, start, end, step) for (size_t iter = (start); iter < (end); iter += (step))
+#define _CVFALSE 0
+#define _CVTRUE 1
+#define _CVFOR(iter, start, end, step) for (size_t iter = (start); iter < (end); iter += (step))
 
 typedef struct {
     size_t _element_size;
@@ -29,14 +28,17 @@ typedef struct {
 } cvec_t;
 
 // Accessor macros
-#define _VHEADER(vec) (((cvec_t *)vec) - 1)
-#define _VCAPACITY(vec) (_VHEADER(vec)->_capacity)
-#define _VSIZE(vec) (_VHEADER(vec)->_size)
-#define _VESIZE(vec) (_VHEADER(vec)->_element_size)
-#define _VDESTRUCTOR(vec) (_VHEADER(vec)->_destructor)
+#define _CVHEADER(vec) (((cvec_t *)vec) - 1)
+#define _CVCAPACITY(vec) (_CVHEADER(vec)->_capacity)
+#define _CVSIZE(vec) (_CVHEADER(vec)->_size)
+#define _CVESIZE(vec) (_CVHEADER(vec)->_element_size)
+#define _CVDESTRUCTOR(vec) (_CVHEADER(vec)->_destructor)
 
-static inline size_t cvec_nexp2(size_t n) {
-    _VREQUIRE(n, return 1);
+static inline size_t _cvec_nexp2(size_t n) {
+    _CVREQUIRE(n, return 1);
+    if (n > SIZE_MAX / 2) {
+        return SIZE_MAX;
+    }
     n -= 1;
     n |= n >> 1;
     n |= n >> 2;
@@ -50,67 +52,185 @@ static inline size_t cvec_nexp2(size_t n) {
     return n;
 }
 
+// Initializes a given vector with a header.
 static inline _Bool cvec_init(
     void **restrict vec, size_t element_size, size_t initial_capacity, void (*destructor)(void *)
 ) {
-    _VREQUIRE(vec && element_size, return _VFALSE);
+    _CVREQUIRE(
+        vec && element_size && initial_capacity < SIZE_MAX / element_size &&
+            SIZE_MAX - initial_capacity * element_size > sizeof(cvec_t),
+        return _CVFALSE
+    );
     cvec_t *cvec = (cvec_t *)malloc(sizeof(cvec_t) + element_size * initial_capacity);
-    _VREQUIRE(cvec, return _VFALSE);
+    _CVREQUIRE(cvec, return _CVFALSE);
     *cvec = (cvec_t){._element_size = element_size,
                      ._capacity = initial_capacity,
                      ._size = 0,
                      ._destructor = destructor};
-    cvec += 1;
-    *vec = cvec;
-    return _VTRUE;
+    *vec = ++cvec;
+    return _CVTRUE;
 }
 
+// Uninitializes/destroys a vector along with its elements should a destructor be provided.
 static inline void cvec_uninit(void **restrict vec) {
-    _VREQUIRE(vec && *vec, return);
-    cvec_t *cvec = _VHEADER(*vec);
+    _CVREQUIRE(vec && *vec, return);
+    cvec_t *cvec = _CVHEADER(*vec);
     void *data = *vec;
     if (cvec->_destructor) {
-        _VFOR(i, 0, _VSIZE(*vec), 1) { cvec->_destructor((char *)data + i * _VESIZE(*vec)); }
+        _CVFOR(i, 0, _CVSIZE(*vec), 1) { cvec->_destructor((char *)data + i * _CVESIZE(*vec)); }
     }
     free(cvec);
     *vec = NULL;
 }
 
+// Guarantees the vector's capacity >= specified capacity
 static inline _Bool cvec_reserve(void **restrict vec, size_t new_capacity) {
-    _VREQUIRE(vec && *vec, return _VFALSE);
-    _VREQUIRE(new_capacity > _VCAPACITY(*vec), return _VTRUE);
-    cvec_t *cvec = _VHEADER(*vec);
-    cvec_t *tmp = (cvec_t *)realloc(cvec, sizeof(cvec_t) + _VESIZE(*vec) * new_capacity);
-    _VREQUIRE(tmp, return _VFALSE);
+    _CVREQUIRE(vec && *vec, return _CVFALSE);
+    _CVREQUIRE(new_capacity > _CVCAPACITY(*vec), return _CVTRUE);
+    new_capacity = _cvec_nexp2(new_capacity);
+    _CVREQUIRE(
+        SIZE_MAX / _CVESIZE(*vec) > new_capacity &&
+            SIZE_MAX - _CVESIZE(*vec) * new_capacity > sizeof(cvec_t),
+        return _CVFALSE
+    );
+    cvec_t *cvec = _CVHEADER(*vec);
+    cvec_t *tmp = (cvec_t *)realloc(cvec, sizeof(cvec_t) + _CVESIZE(*vec) * new_capacity);
+    _CVREQUIRE(tmp, return _CVFALSE);
     tmp->_capacity = new_capacity;
-    *vec = tmp + 1;
-    return _VTRUE;
+    *vec = ++tmp;
+    return _CVTRUE;
 }
 
-static inline _Bool cvec_pushback(void **restrict vec, void *restrict element) {
-    _VREQUIRE(vec && *vec && element, return _VFALSE);
-    if (_VSIZE(*vec) == _VCAPACITY(*vec)) {
-        _VREQUIRE(cvec_reserve(vec, cvec_nexp2(_VCAPACITY(*vec) + 1)), return _VFALSE);
+// Pushes an element to the end of the vector.
+static inline _Bool cvec_pushback(void **restrict vec, const void *restrict element) {
+    _CVREQUIRE(vec && *vec && element, return _CVFALSE);
+    if (_CVSIZE(*vec) == _CVCAPACITY(*vec)) {
+        _CVREQUIRE(cvec_reserve(vec, _CVCAPACITY(*vec) + 1), return _CVFALSE);
     }
-    memcpy((char *)*vec + _VSIZE(*vec) * _VESIZE(*vec), element, _VESIZE(*vec));
-    ++_VHEADER(*vec)->_size;
-    return _VTRUE;
+    memcpy((char *)*vec + _CVSIZE(*vec) * _CVESIZE(*vec), element, _CVESIZE(*vec));
+    ++_CVHEADER(*vec)->_size;
+    return _CVTRUE;
 }
 
+// Pops the last element of the vector.
 static inline void cvec_popback(void **restrict vec) {
-    _VREQUIRE(vec && *vec && _VSIZE(*vec) > 0, return);
-    if (_VDESTRUCTOR(*vec)) {
-        _VDESTRUCTOR (*vec)((char *)*vec + (_VSIZE(*vec) - 1) * _VESIZE(*vec));
+    _CVREQUIRE(vec && *vec && _CVSIZE(*vec) > 0, return);
+    if (_CVDESTRUCTOR(*vec)) {
+        _CVDESTRUCTOR (*vec)((char *)*vec + (_CVSIZE(*vec) - 1) * _CVESIZE(*vec));
     }
-    --_VSIZE(*vec);
+    --_CVSIZE(*vec);
 }
 
-static inline void cvec_clear(void **restrict vec) {
-    _VREQUIRE(vec && *vec, return);
-    if (_VDESTRUCTOR(*vec)) {
-        _VFOR(i, 0, _VSIZE(*vec), 1) {
-            _VDESTRUCTOR (*vec)((char *)*vec + i * _VESIZE(*vec));
-        };
+// Inserts an element to a specified index of the vector.
+static inline _Bool cvec_insert(void **restrict vec, size_t index, const void *restrict element) {
+    _CVREQUIRE(vec && *vec && element && index < _CVSIZE(*vec) + 1, return _CVFALSE);
+    if (_CVSIZE(*vec) == _CVCAPACITY(*vec)) {
+        _CVREQUIRE(cvec_reserve(vec, _CVCAPACITY(*vec) + 1), return _CVFALSE);
     }
-    _VSIZE(*vec) = 0;
+    memmove(
+        (char *)*vec + (index + 1) * _CVESIZE(*vec), (char *)*vec + index * _CVESIZE(*vec),
+        (_CVSIZE(*vec) - index) * _CVESIZE(*vec)
+    );
+    memcpy((char *)*vec + (index * _CVESIZE(*vec)), element, _CVESIZE(*vec));
+    ++_CVSIZE(*vec);
+    return _CVTRUE;
 }
+
+// Removes an element at a specified index of the vector.
+static inline void cvec_remove(void **restrict vec, size_t index) {
+    _CVREQUIRE(vec && *vec && _CVSIZE(*vec) && index < _CVSIZE(*vec), return);
+    if (_CVDESTRUCTOR(*vec)) {
+        _CVDESTRUCTOR (*vec)((char *)*vec + index * _CVESIZE(*vec));
+    }
+    memmove(
+        (char *)*vec + index * _CVESIZE(*vec), (char *)*vec + (index + 1) * _CVESIZE(*vec),
+        (_CVSIZE(*vec) - index - 1) * _CVESIZE(*vec)
+    );
+    --_CVSIZE(*vec);
+}
+
+// Clears all the elements of the vector.
+static inline void cvec_clear(void **restrict vec) {
+    _CVREQUIRE(vec && *vec, return);
+    if (_CVDESTRUCTOR(*vec)) {
+        _CVFOR(i, 0, _CVSIZE(*vec), 1) { _CVDESTRUCTOR (*vec)((char *)*vec + i * _CVESIZE(*vec)); };
+    }
+    _CVSIZE(*vec) = 0;
+}
+
+// Performs a shallow copy on a given vector.
+static inline _Bool cvec_shlwcopy(void **restrict dst_vec, const void **restrict src_vec) {
+    _CVREQUIRE(dst_vec && src_vec && *src_vec, return _CVFALSE);
+    *dst_vec = malloc(sizeof(cvec_t) + _CVCAPACITY(*src_vec) * _CVESIZE(*src_vec));
+    _CVREQUIRE(*dst_vec, return _CVFALSE);
+    memcpy(*dst_vec, _CVHEADER(*src_vec), sizeof(cvec_t) + _CVSIZE(*src_vec) * _CVESIZE(*src_vec));
+    ++*(cvec_t **)dst_vec;
+    return _CVTRUE;
+}
+
+// Performs a deep copy on a given vector.
+static inline _Bool cvec_dpcopy(
+    void **restrict dst_vec, const void **restrict src_vec, _Bool (*copy_func)(void *, const void *)
+) {
+    _CVREQUIRE(dst_vec && src_vec && *src_vec, return _CVFALSE);
+    _CVREQUIRE(
+        cvec_init(dst_vec, _CVESIZE(*src_vec), _CVCAPACITY(*src_vec), _CVDESTRUCTOR(*src_vec)),
+        return _CVFALSE
+    );
+    _CVFOR(i, 0, _CVSIZE(*src_vec), 1) {
+        const _Bool cpy = copy_func(
+            (char *)*dst_vec + i * _CVESIZE(*dst_vec),
+            (const char *)*src_vec + i * _CVESIZE(*src_vec)
+        );
+        if (!cpy) {
+            _CVSIZE(*dst_vec) = i;
+            cvec_uninit(dst_vec);
+            return _CVFALSE;
+        }
+    }
+    _CVSIZE(*dst_vec) = _CVSIZE(*src_vec);
+    return _CVTRUE;
+}
+
+// Macro API
+#if defined(__GNUC__) || defined(__clang__)
+#define CVEC_INIT(vec, init_capacity, destructor)                                                  \
+    cvec_init((void **)&vec, sizeof(*vec), init_capacity, destructor)
+#define CVEC_PUSHBACK(vec, element)                                                                \
+    do {                                                                                           \
+        const typeof(*vec) pback_tmp_element = element;                                            \
+        cvec_pushback((void **)&vec, (const void *)&pback_tmp_element);                            \
+    } while (0)
+
+#define CVEC_INSERT(vec, index, element)                                                           \
+    do {                                                                                           \
+        const typeof(*vec) insert_tmp_element = element;                                           \
+        cvec_insert((void **)&vec, index, (const void *)&insert_tmp_element);                      \
+    } while (0)
+#else
+#define CVEC_INIT(type, vec, init_capacity, destructor)                                            \
+    cvec_init((void **)&vec, sizeof(type), init_capacity, destructor)
+#define CVEC_PUSHBACK(type, vec, element)                                                          \
+    do {                                                                                           \
+        const type pback_tmp_element = element;                                                    \
+        cvec_pushback((void **)&vec, (const void *)&pback_tmp_element);                            \
+    } while (0)
+
+#define CVEC_INSERT(type, vec, index, element)                                                     \
+    do {                                                                                           \
+        const type insert_tmp_element = element;                                                   \
+        cvec_insert((void **)&vec, index, (const void *)&insert_tmp_element);                      \
+    } while (0)
+
+#endif
+
+#define CVEC_SIZE(vec) _CVSIZE(vec)
+#define CVEC_CAPACITY(vec) _CVCAPACITY(vec)
+#define CVEC_ESIZE(vec) _CVESIZE(vec)
+#define CVEC_DESTRUCTOR(vec) _CVDESTRUCTOR(vec)
+#define CVEC_UNINIT(vec) cvec_uninit((void **)&vec)
+#define CVEC_POPBACK(vec) cvec_popback((void **)&vec)
+#define CVEC_REMOVE(vec, index) cvec_remove((void **)&vec, index)
+#define CVEC_CLEAR(vec) cvec_clear((void **)&vec)
+#define CVEC_SCOPY(dst, src) cvec_shlwcopy((void **)&dst, (const void **)&src)
+#define CVEC_DCOPY(dst, src, cpy_func) cvec_dpcopy((void **)&dst, (const void **)&src, cpy_func)
