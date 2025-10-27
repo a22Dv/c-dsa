@@ -2,3 +2,5 @@
 .tests/
 cds.c
 cds.exe
+cds.ilk
+cds.pdb
