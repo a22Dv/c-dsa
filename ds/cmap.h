@@ -53,6 +53,12 @@ typedef struct {
     void (*_val_destructor)(void **); // Receives a pointer to the element to be destroyed.
 } cmap_t;
 
+typedef struct {
+    cmap_t *map;
+    size_t bucket_idx;
+    size_t st_idx;
+} cmap_iterator_t;
+
 _CMSTCINL size_t _cmap_nexp2(size_t n) {
     _CMREQUIRE(n, return 1);
     if (n > SIZE_MAX / 2) {
@@ -304,6 +310,7 @@ _CMSTCINL _Bool cmap_insert(cmap_t **map, void *key, void *value) {
     if ((float)(*map)->_size / (*map)->_capacity >= _CMLFACTOR_LIMIT) {
         cmap_resize(map, (*map)->_capacity + 1);
     }
+
     cmap_t *cmap = *map;
     cmap_bucket_t *bucket = &cmap->_buckets[cmap->_hash_func(key) & (cmap->_capacity - 1)];
     cmap_entry_t *insertion_slot = NULL;
@@ -439,6 +446,71 @@ _CMSTCINL void cmap_remove(cmap_t **map, void *key) {
     }
 }
 
+_CMSTCINL _Bool cmap_iter_next(cmap_iterator_t *iter, cmap_entry_t *out) {
+    _CMREQUIRE(iter && out && iter->map && iter->bucket_idx < iter->map->_size, return _CMFALSE);
+    cmap_t *map = iter->map;
+    size_t bucket_idx = iter->bucket_idx;
+    size_t st_idx = iter->st_idx;
+    cmap_bucket_t *bucket = &map->_buckets[bucket_idx];
+
+    ++st_idx;
+    while (bucket_idx < map->_capacity) {
+        if (!bucket->_occupied) {
+            bucket = &map->_buckets[++bucket_idx];
+            continue;
+        }
+        _Bool found = _CMFALSE;
+        size_t tbkt_capacity = bucket->_overflow_capacity + _CM_INLINE_SIZE;
+        while (st_idx < tbkt_capacity) {
+            if (st_idx < _CM_INLINE_SIZE &&
+                bucket->_inline_entries[st_idx].key != (void *)_CMSENTINEL) {
+                found = _CMTRUE;
+                break;
+            } else if (st_idx >= _CM_INLINE_SIZE &&
+                       bucket->_overflow_entries[st_idx - _CM_INLINE_SIZE].key !=
+                           (void *)_CMSENTINEL) {
+                found = _CMTRUE;
+                break;
+            }
+            ++st_idx;
+        }
+        if (found) {
+            break;
+        } else if (st_idx == tbkt_capacity) {
+            bucket = &map->_buckets[++bucket_idx];
+            st_idx = 0;
+        }
+    }
+    if (bucket_idx == map->_size) {
+        iter->bucket_idx = bucket_idx;
+        iter->st_idx = st_idx;
+        return _CMFALSE;
+    }
+    cmap_entry_t *arr = st_idx < _CM_INLINE_SIZE ? map->_buckets[bucket_idx]._inline_entries
+                                                 : map->_buckets[bucket_idx]._overflow_entries;
+    *out = arr[st_idx - ((st_idx < _CM_INLINE_SIZE) ? 0 : _CM_INLINE_SIZE)];
+    iter->bucket_idx = bucket_idx;
+    iter->st_idx = st_idx;
+    return _CMTRUE;
+}
+
+_CMSTCINL _Bool cmap_iter_start(cmap_t **map, cmap_iterator_t *iter, cmap_entry_t *out) {
+    _CMREQUIRE(map && *map && iter && out, return _CMFALSE);
+    _CMREQUIRE((*map)->_size > 0, return _CMFALSE);
+
+    iter->bucket_idx = 0;
+    iter->map = *map;
+    iter->st_idx = 0;
+
+    cmap_t *cmap = *map;
+    if (cmap->_buckets[0]._inline_entries[0].key != (void *)_CMSENTINEL) {
+        *out = cmap->_buckets[0]._inline_entries[0];
+    } else {
+        _CMREQUIRE(cmap_iter_next(iter, out), return _CMFALSE);
+    }
+    return _CMTRUE;
+}
+
 // Macro API accessors.
 #define CMAP_SIZE(map) (map->_size)
 #define CMAP_CAPACITY(map) (map->_capacity)
@@ -461,3 +533,5 @@ _CMSTCINL void cmap_remove(cmap_t **map, void *key) {
 #define CMAP_GETENTRY(map, key) (cmap_get_entry(&map, (void *)key))
 #define CMAP_GETVAL(map, key, out) (cmap_get(&map, (void *)key, (void **)&out))
 #define CMAP_RESIZE(map, nsize) (cmap_resize(&map, nsize))
+#define CMAP_ITER_START(map, iter, out) (cmap_iter_start(&map, &iter, &out))
+#define CMAP_ITER_NEXT(iter, out) (cmap_iter_next(&iter, &out))
