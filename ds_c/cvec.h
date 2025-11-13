@@ -1,7 +1,7 @@
-/*
-    cvec.h
-    A minimal vector implementation in C.
-*/
+/*  cvec.h
+ *  A minimal vector implementation in C.
+ *  https://github.com/a22Dv/c-dsa
+ */
 
 #pragma once
 

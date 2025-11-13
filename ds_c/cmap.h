@@ -1,7 +1,7 @@
-/*
-    cmap.h
-    A minimal hashmap (a.k.a std::unordered_map) implementation in C.
-*/
+/*  cmap.h
+ *  A minimal hashmap (a.k.a std::unordered_map) implementation in C.
+ *  https://github.com/a22Dv/c-dsa
+ */
 
 #pragma once
 
@@ -17,6 +17,7 @@
             action;                                                                                \
         }                                                                                          \
     } while (0)
+    
 #define _CMFALSE 0
 #define _CMTRUE 1
 #define _CMFOR(iter, start, end, step) for (size_t iter = (start); iter < (end); iter += (step))
@@ -24,6 +25,7 @@
 #define _CMMAX(a, b) ((a) > (b) ? (a) : (b))
 #define _CM_INLINE_SIZE 3
 #define _CMLFACTOR_LIMIT 0.7
+#define _CMLFACTOR_MIN 0.2
 
 #define _CMSENTINEL 0xC0FFEEC0FFEECAFE
 #define _CM_MAX_ENTRIES UINT16_MAX
@@ -426,6 +428,7 @@ _CMSTCINL _Bool cmap_get(cmap_t **map, void *key, void **out) {
     return _CMTRUE;
 }
 
+// Removes a specified key-value entry from the map.
 _CMSTCINL void cmap_remove(cmap_t **map, void *key) {
     _CMREQUIRE(map && *map, return);
     cmap_entry_t *entry = cmap_get_entry(map, key);
@@ -444,6 +447,9 @@ _CMSTCINL void cmap_remove(cmap_t **map, void *key) {
     if (!bucket->_total_entries) {
         bucket->_occupied = _CMFALSE;
     }
+    if ((float)cmap->_size / cmap->_capacity < _CMLFACTOR_MIN) {
+        cmap_resize(map, cmap->_capacity / 2);
+    }
 }
 
 _CMSTCINL _Bool cmap_iter_next(cmap_iterator_t *iter, cmap_entry_t *out) {
@@ -453,7 +459,8 @@ _CMSTCINL _Bool cmap_iter_next(cmap_iterator_t *iter, cmap_entry_t *out) {
     size_t st_idx = iter->st_idx;
     cmap_bucket_t *bucket = &map->_buckets[bucket_idx];
 
-    ++st_idx;
+    ++st_idx; // Increment to possible next entry.
+
     while (bucket_idx < map->_capacity) {
         if (!bucket->_occupied) {
             bucket = &map->_buckets[++bucket_idx];

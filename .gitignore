@@ -1,6 +1,12 @@
 .vscode/
 .tests/
+
 cds.c
 cds.exe
 cds.ilk
 cds.pdb
+
+cppds.cpp
+cppds.exe
+cppds.ilk 
+cppds.pdb 
